@@ -39,10 +39,10 @@
   <div class="container">
     <div class="header">
       <div class="title">CJ PriceWatch — Demo Premium</div>
-      <div class="search">
-        <input id="q" placeholder="Medida + marca (ex.: 2055516yok ou 205/55 R16 Yokohama)"/>
-        <button class="btn" id="go">Pesquisar</button>
-      </div>
+      <form class="search" onsubmit="triggerSearch();return false;">
+        <input id="q" autocomplete="off" placeholder="Medida + marca (ex.: 2055516yok ou 205/55 R16 Yokohama)"/>
+        <button type="button" class="btn" id="go" onclick="triggerSearch()">Pesquisar</button>
+      </form>
     </div>
 
     <div class="bar" id="chips" style="margin-top:8px"></div>
@@ -71,10 +71,11 @@
       </tbody>
     </table>
 
-    <div class="footer">Demo com dados fictícios. Pesquise por exemplo: <b>2055516yok</b>.</div>
+    <div class="footer">Demo com dados fictícios. Exemplo: <b>2055516yok</b>. Se nada acontecer, recarregue com <b>Ctrl+F5</b>.</div>
   </div>
 
 <script>
+"use strict";
 const BRAND_MAP = {yok:'Yokohama',cn:'Continental',mb:'Mabor',bs:'Bridgestone',hn:'Hankook',pn:'Pirelli'};
 const F = new Intl.NumberFormat('pt-PT',{style:'currency',currency:'EUR'});
 
@@ -88,7 +89,7 @@ function parseInput(s){
   const brandChunk = alnum.slice(7);
   if(!width||!aspect||!rim||!brandChunk) return null;
   const code = Object.keys(BRAND_MAP).find(k=>brandChunk.startsWith(k)) || brandChunk;
-  return {width,aspect,rim,brand:BRAND_MAP[code]||code.toUpperCase()};
+  return {width,aspect,rim,brand:(BRAND_MAP[code]||code.toUpperCase())};
 }
 
 function mockFetch(q){
@@ -102,10 +103,10 @@ function mockFetch(q){
   return {
     query:q,
     sources:[
-      {name:"Chaveca & Janeira", price:me, ts:new Date(now-1*3600e3), hist:h(me), me:true},
-      {name:"Concorrente 1",    price:c1, ts:new Date(now-6*3600e3), hist:h(c1)},
-      {name:"Concorrente 2",    price:c2, ts:new Date(now-28*3600e3), hist:h(c2)},
-      {name:"Concorrente 3",    price:c3, ts:new Date(now-40*3600e3), hist:h(c3)}
+      {name:"Chaveca & Janeira", price:me, ts:new Date(now-1*3600e3),  hist:h(me), me:true},
+      {name:"Concorrente 1",     price:c1, ts:new Date(now-6*3600e3),  hist:h(c1)},
+      {name:"Concorrente 2",     price:c2, ts:new Date(now-28*3600e3), hist:h(c2)},
+      {name:"Concorrente 3",     price:c3, ts:new Date(now-40*3600e3), hist:h(c3)}
     ]
   };
 }
@@ -120,35 +121,36 @@ function spark(values){
     const y = h-pad - ((v-min)/(max-min||1))*(h-2*pad);
     return `${x},${y}`;
   }).join(' ');
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><polyline fill="none" stroke="#2A3EF4" stroke-width="2" points="${pts}"/></svg>`;
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+            <polyline fill="none" stroke="#2A3EF4" stroke-width="2" points="${pts}"/>
+          </svg>`;
 }
 
-function render(q){
+function renderBoard(q){
   const data = mockFetch(q);
   const me = data.sources.find(s=>s.me), comps = data.sources.filter(s=>!s.me);
   const avg = comps.reduce((a,b)=>a+b.price,0)/comps.length;
   const diff = avg - me.price, diffPct = diff/avg;
 
-  // chips
   const chips = document.getElementById('chips');
   chips.innerHTML = '';
   [['Largura',q.width],['Perfil',q.aspect],['Jante','R'+q.rim],['Marca',q.brand]].forEach(([k,v])=>{
     const el = document.createElement('span'); el.className='chip'; el.textContent=`${k}: ${v}`; chips.appendChild(el);
   });
 
-  // KPIs
   document.getElementById('vMe').textContent = F.format(me.price);
   document.getElementById('tMe').textContent = 'Atualizado há ' + ts(me.ts);
+
   const ranked = [...data.sources].sort((a,b)=>a.price-b.price);
   const myRank = ranked.findIndex(s=>s.me)+1;
   const b = document.getElementById('bRank');
   b.textContent = myRank+'º'; b.className = 'badge ' + (myRank===1?'ok':(myRank===2?'warn':'bad'));
+
   document.getElementById('vAvg').textContent = F.format(avg);
   document.getElementById('tAvg').textContent = 'Concorrentes: '+comps.length;
   document.getElementById('vDiff').textContent = F.format(diff);
   document.getElementById('vPct').textContent = (diffPct*100).toFixed(2)+'%';
 
-  // Tabela
   const tbody = document.getElementById('tbody'); tbody.innerHTML='';
   ranked.forEach((s,i)=>{
     const delta = s.price - me.price, deltaPct = (delta/(me.price||1))*100;
@@ -166,14 +168,19 @@ function render(q){
   });
 }
 
-// handlers
-document.getElementById('go').addEventListener('click', ()=> {
-  const q = parseInput(document.getElementById('q').value);
-  if(!q){ alert('Ex.: 2055516yok ou 205/55 R16 Yokohama'); return; }
-  render(q);
-});
-document.getElementById('q').addEventListener('keydown', e=>{
-  if(e.key==='Enter'){ document.getElementById('go').click(); }
+function triggerSearch(){
+  const inp = document.getElementById('q');
+  const q = parseInput(inp.value);
+  if(!q){ alert('Ex.: 2055516yok ou 205/55 R16 Yokohama'); inp.focus(); return; }
+  renderBoard(q);
+}
+
+// fallback total: garantir binding mesmo que o browser atrase scripts
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('go').addEventListener('click', triggerSearch);
+  document.getElementById('q').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); triggerSearch(); } });
+  // auto-demo para provar que está tudo a funcionar
+  const inp = document.getElementById('q'); inp.value = '2055516yok'; triggerSearch();
 });
 </script>
 </body>
